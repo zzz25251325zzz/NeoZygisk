@@ -82,7 +82,7 @@ androidComponents.onVariants { variant ->
             include("**/zygiskd")
         }
         into("lib") {
-            from(project(":loader").layout.buildDirectory.file("intermediates/stripped_native_libs/$variantLowered/out/lib"))
+            from(project(":loader").layout.buildDirectory.file("intermediates/stripped_native_libs/$variantLowered/strip${variantCapped}DebugSymbols/out/lib"))
         }
 
         val root = moduleDir.get()
