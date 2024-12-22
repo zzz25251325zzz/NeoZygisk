@@ -54,7 +54,7 @@ bool ZygiskModule::RegisterModuleImpl(ApiTable *api, long *module) {
         api->v2.getFlags = [](auto) { return ZygiskModule::getFlags(); };
     }
     if (api_version >= 4) {
-        api->v4.pltHookCommit = lsplt::CommitHook;
+        api->v4.pltHookCommit = []() { return lsplt::CommitHook(g_hook->cached_map_infos); };
         api->v4.pltHookRegister = [](dev_t dev, ino_t inode, const char *symbol, void *fn,
                                      void **backup) {
             if (dev == 0 || inode == 0 || symbol == nullptr || fn == nullptr) return;
@@ -155,7 +155,7 @@ void ZygiskContext::plt_hook_exclude(const char *regex, const char *symbol) {
 
 void ZygiskContext::plt_hook_process_regex() {
     if (register_info.empty()) return;
-    for (auto &map : lsplt::MapInfo::Scan()) {
+    for (auto &map : g_hook->cached_map_infos) {
         if (map.offset != 0 || !map.is_private || !(map.perms & PROT_READ)) continue;
         for (auto &reg : register_info) {
             if (regexec(&reg.regex, map.path.data(), 0, nullptr, 0) != 0) continue;
@@ -181,7 +181,7 @@ bool ZygiskContext::plt_hook_commit() {
         register_info.clear();
         ignore_info.clear();
     }
-    return lsplt::CommitHook();
+    return lsplt::CommitHook(g_hook->cached_map_infos);
 }
 
 // -----------------------------------------------------------------

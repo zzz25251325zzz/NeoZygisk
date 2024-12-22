@@ -4,11 +4,14 @@
 
 #include <bitset>
 #include <list>
+#include <span>
 #include <vector>
 
 #include "api.hpp"
+#include "lsplt.hpp"
 
 struct ZygiskContext;
+struct HookContext;
 struct ZygiskModule;
 
 struct AppSpecializeArgs_v1;
@@ -229,6 +232,7 @@ private:
 };
 
 extern ZygiskContext *g_ctx;
+extern HookContext *g_hook;
 extern int (*old_fork)(void);
 
 enum : uint32_t {
@@ -305,3 +309,30 @@ struct ZygiskContext {
 };
 
 #undef DCL_PRE_POST
+
+using JNIMethods = std::span<JNINativeMethod>;
+
+struct HookContext {
+#include "jni_hooks.hpp"
+
+    // std::array<JNINativeMethod> zygote_methods
+    void *start_addr = nullptr;
+    size_t block_size = 0;
+    bool should_unmap = false;
+    jint MODIFIER_NATIVE = 0;
+    jmethodID member_getModifiers = nullptr;
+    std::vector<lsplt::MapInfo> cached_map_infos = {};
+    std::vector<std::tuple<dev_t, ino_t, const char *, void **>> plt_backup;
+
+    HookContext(void *start_addr, size_t block_size);
+
+    void hook_plt();
+    void hook_unloader();
+    void restore_plt_hook();
+    void hook_zygote_jni();
+    void restore_zygote_hook(JNIEnv *env);
+    void hook_jni_methods(JNIEnv *env, const char *clz, JNIMethods methods);
+
+private:
+    void register_hook(dev_t dev, ino_t inode, const char *symbol, void *new_func, void **old_func);
+};

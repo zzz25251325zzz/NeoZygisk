@@ -5,13 +5,11 @@
 #include <unwind.h>
 
 #include <lsplt.hpp>
-#include <span>
 
 #include "art_method.hpp"
 #include "daemon.h"
 #include "jni_helper.hpp"
 #include "logging.h"
-#include "misc.hpp"
 #include "module.hpp"
 #include "zygisk.hpp"
 
@@ -83,32 +81,7 @@ constexpr const char *kZygote = "com/android/internal/os/Zygote";
 // features, such as loading modules and customizing process fork/specialization.
 
 ZygiskContext *g_ctx;
-struct HookContext;
-static HookContext *g_hook;
-
-using JNIMethods = std::span<JNINativeMethod>;
-
-struct HookContext {
-#include "jni_hooks.hpp"
-
-    // std::array<JNINativeMethod> zygote_methods
-    vector<tuple<dev_t, ino_t, const char *, void **>> plt_backup;
-    void *start_addr = nullptr;
-    size_t block_size = 0;
-    bool should_unmap = false;
-    jint MODIFIER_NATIVE = 0;
-    jmethodID member_getModifiers = nullptr;
-
-    void hook_plt();
-    void hook_unloader();
-    void restore_plt_hook();
-    void hook_zygote_jni();
-    void restore_zygote_hook(JNIEnv *env);
-    void hook_jni_methods(JNIEnv *env, const char *clz, JNIMethods methods);
-
-private:
-    void register_hook(dev_t dev, ino_t inode, const char *symbol, void *new_func, void **old_func);
-};
+HookContext *g_hook;
 
 // -----------------------------------------------------------------
 
@@ -119,6 +92,7 @@ private:
 DCL_HOOK_FUNC(static char *, strdup, const char *str) {
     if (strcmp(kZygoteInit, str) == 0) {
         g_hook->hook_zygote_jni();
+        g_hook->cached_map_infos = lsplt::MapInfo::Scan();
     }
     return old_strdup(str);
 }
@@ -235,6 +209,11 @@ ZygiskContext::~ZygiskContext() {
 
 // -----------------------------------------------------------------
 
+HookContext::HookContext(void *start_addr, size_t block_size)
+    : start_addr{start_addr}, block_size{block_size} {};
+
+// -----------------------------------------------------------------
+
 inline void *unwind_get_region_start(_Unwind_Context *ctx) {
     auto fp = _Unwind_GetRegionStart(ctx);
 #if defined(__arm__)
@@ -270,7 +249,8 @@ void HookContext::hook_plt() {
     ino_t android_runtime_inode = 0;
     dev_t android_runtime_dev = 0;
 
-    for (auto &map : lsplt::MapInfo::Scan()) {
+    cached_map_infos = lsplt::MapInfo::Scan();
+    for (auto &map : cached_map_infos) {
         if (map.path.ends_with("/libandroid_runtime.so")) {
             android_runtime_inode = map.inode;
             android_runtime_dev = map.dev;
@@ -284,7 +264,7 @@ void HookContext::hook_plt() {
     PLT_HOOK_REGISTER_SYM(android_runtime_dev, android_runtime_inode, "__android_log_close",
                           android_log_close);
 
-    if (!lsplt::CommitHook()) LOGE("plt_hook failed\n");
+    if (!lsplt::CommitHook(cached_map_infos)) LOGE("plt_hook failed\n");
 
     // Remove unhooked methods
     plt_backup.erase(std::remove_if(plt_backup.begin(), plt_backup.end(),
@@ -296,7 +276,7 @@ void HookContext::hook_unloader() {
     ino_t art_inode = 0;
     dev_t art_dev = 0;
 
-    for (auto &map : lsplt::MapInfo::Scan()) {
+    for (auto &map : cached_map_infos) {
         if (map.path.ends_with("/libart.so")) {
             art_inode = map.inode;
             art_dev = map.dev;
@@ -305,7 +285,7 @@ void HookContext::hook_unloader() {
     }
 
     PLT_HOOK_REGISTER(art_dev, art_inode, pthread_attr_setstacksize);
-    if (!lsplt::CommitHook()) LOGE("plt_hook failed\n");
+    if (!lsplt::CommitHook(cached_map_infos)) LOGE("plt_hook failed\n");
 }
 
 void HookContext::restore_plt_hook() {
@@ -316,7 +296,7 @@ void HookContext::restore_plt_hook() {
             should_unmap = false;
         }
     }
-    if (!lsplt::CommitHook()) {
+    if (!lsplt::CommitHook(cached_map_infos)) {
         LOGE("Failed to restore plt_hook\n");
         should_unmap = false;
     }
@@ -372,7 +352,7 @@ void HookContext::hook_zygote_jni() {
     auto get_created_java_vms = reinterpret_cast<jint (*)(JavaVM **, jsize, jsize *)>(
         dlsym(RTLD_DEFAULT, "JNI_GetCreatedJavaVMs"));
     if (!get_created_java_vms) {
-        for (auto &map : lsplt::MapInfo::Scan()) {
+        for (auto &map : cached_map_infos) {
             if (!map.path.ends_with("/libnativehelper.so")) continue;
             void *h = dlopen(map.path.data(), RTLD_LAZY);
             if (!h) {
@@ -421,9 +401,7 @@ void HookContext::restore_zygote_hook(JNIEnv *env) {
 // -----------------------------------------------------------------
 
 void hook_entry(void *start_addr, size_t block_size) {
-    default_new(g_hook);
-    g_hook->start_addr = start_addr;
-    g_hook->block_size = block_size;
+    g_hook = new HookContext(start_addr, block_size);
     g_hook->hook_plt();
     clean_trace(zygiskd::GetTmpPath().data(), 1, 0, false);
 }
