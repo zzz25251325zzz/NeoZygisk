@@ -1,4 +1,5 @@
 #include <dlfcn.h>
+#include <sys/mman.h>
 #include <sys/mount.h>
 #include <unistd.h>
 #include <unwind.h>
@@ -53,9 +54,9 @@ using namespace std;
 //                   │                 ┌─────────────┐              │
 //                   └────────────────►│ZygiskContext│              │
 //                                     └─────────────┘              ▼
-//                                                        ┌────────────────────┐
-//                                                        │pthread_attr_destroy│
-//                                                        └─────────┬──────────┘
+//                                                       ┌─────────────────────────┐
+//                                                       │pthread_attr_setstacksize│
+//                                                       └──────────┬──────────────┘
 //                                    ┌────────────────┐            │
 //                                    │restore_plt_hook│◄───────────┘
 //                                    └────────────────┘
@@ -66,8 +67,8 @@ using namespace std;
 // * strdup: called in AndroidRuntime::start before calling ZygoteInit#main(...)
 // * HookContext::hook_zygote_jni(): replace the process specialization functions registered
 //   with register_jni_procs. This marks the final step of the code injection bootstrap process.
-// * pthread_attr_destroy: called whenever the JVM tries to setup threads for itself. We use
-//   this method to cleanup and unload Zygisk from the process.
+// * pthread_attr_setstacksize: called whenever the JVM tries to setup threads for itself. We use
+//   this method to cleanup and unmap Zygisk from the process.
 
 constexpr const char *kZygoteInit = "com.android.internal.os.ZygoteInit";
 constexpr const char *kZygote = "com/android/internal/os/Zygote";
@@ -91,7 +92,8 @@ struct HookContext {
 
     // std::array<JNINativeMethod> zygote_methods
     vector<tuple<dev_t, ino_t, const char *, void **>> plt_backup;
-    void *self_handle = nullptr;
+    void *start_addr = nullptr;
+    size_t block_size = 0;
     bool should_unmap = false;
     jint MODIFIER_NATIVE = 0;
     jmethodID member_getModifiers = nullptr;
@@ -163,27 +165,29 @@ DCL_HOOK_FUNC(static void, android_log_close) {
     old_android_log_close();
 }
 
-// We cannot directly call `dlclose` to unload ourselves, otherwise when `dlclose` returns,
+// We cannot directly call `munmap` to unload ourselves, otherwise when `munmap` returns,
 // it will return to our code which has been unmapped, causing segmentation fault.
-// Instead, we hook `pthread_attr_destroy` which will be called when VM daemon threads start.
-DCL_HOOK_FUNC(static int, pthread_attr_destroy, void *target) {
-    int res = old_pthread_attr_destroy((pthread_attr_t *) target);
+// Instead, we hook `pthread_attr_setstacksize` which will be called when VM daemon threads start.
+DCL_HOOK_FUNC(static int, pthread_attr_setstacksize, void *target, size_t size) {
+    int res = old_pthread_attr_setstacksize((pthread_attr_t *) target, size);
+
+    LOGV("pthread_attr_setstacksize called in [tid, pid]: %d, %d", gettid(), getpid());
 
     // Only perform unloading on the main thread
     if (gettid() != getpid()) return res;
 
-    LOGV("pthread_attr_destroy\n");
     if (g_hook->should_unmap) {
         g_hook->restore_plt_hook();
         if (g_hook->should_unmap) {
-            LOGV("dlclosing self\n");
-            void *self_handle = g_hook->self_handle;
+            void *start_addr = g_hook->start_addr;
+            size_t block_size = g_hook->block_size;
             delete g_hook;
 
-            // Because both `pthread_attr_destroy` and `dlclose` have the same function signature,
-            // we can use `musttail` to let the compiler reuse our stack frame and thus
-            // `dlclose` will directly return to the caller of `pthread_attr_destroy`.
-            [[clang::musttail]] return dlclose(self_handle);
+            // Because both `pthread_attr_setstacksize` and `munmap` have the same function
+            // signature, we can use `musttail` to let the compiler reuse our stack frame and thus
+            // `munmap` will directly return to the caller of `pthread_attr_setstacksize`.
+            LOGI("unmap libzygisk.so loaded at %p with size %zu", start_addr, block_size);
+            [[clang::musttail]] return munmap(start_addr, block_size);
         }
     }
 
@@ -299,7 +303,7 @@ void HookContext::hook_unloader() {
         }
     }
 
-    PLT_HOOK_REGISTER(art_dev, art_inode, pthread_attr_destroy);
+    PLT_HOOK_REGISTER(art_dev, art_inode, pthread_attr_setstacksize);
     if (!lsplt::CommitHook()) LOGE("plt_hook failed\n");
 }
 
@@ -415,9 +419,10 @@ void HookContext::restore_zygote_hook(JNIEnv *env) {
 
 // -----------------------------------------------------------------
 
-void hook_entry(void *handle) {
+void hook_entry(void *start_addr, size_t block_size) {
     default_new(g_hook);
-    g_hook->self_handle = handle;
+    g_hook->start_addr = start_addr;
+    g_hook->block_size = block_size;
     g_hook->hook_plt();
 }
 

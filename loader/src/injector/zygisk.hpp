@@ -2,7 +2,7 @@
 
 #include <jni.h>
 
-void hook_entry(void *self_handle);
+void hook_entry(void *start_addr, size_t block_size);
 
 void revert_unmount_ksu();
 

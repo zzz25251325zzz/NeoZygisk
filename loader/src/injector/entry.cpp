@@ -4,11 +4,10 @@
 
 using namespace std;
 
-void *self_handle = nullptr;
-
 extern "C" [[gnu::visibility("default")]]
-void entry(void *handle, const char *path) {
+void entry(void *addr, size_t size, const char *path) {
     LOGI("Zygisk library injected, version %s", ZKSU_VERSION);
+
     zygiskd::Init(path);
 
     if (!zygiskd::PingHeartbeat()) {
@@ -21,5 +20,5 @@ void entry(void *handle, const char *path) {
 #endif
 
     LOGI("Start hooking");
-    hook_entry(handle);
+    hook_entry(addr, size);
 }
