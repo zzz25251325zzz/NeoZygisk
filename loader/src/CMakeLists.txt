@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("loader")
 
+set(CMAKE_CXX_STANDARD 23)
+
 find_package(cxx REQUIRED CONFIG)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
