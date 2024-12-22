@@ -101,9 +101,7 @@ void ZygiskModule::setOption(zygisk::Option opt) {
 
 uint32_t ZygiskModule::getFlags() { return g_ctx ? (g_ctx->info_flags & ~PRIVATE_MASK) : 0; }
 
-void ZygiskModule::tryUnload() const {
-    if (unload) dlclose(handle);
-}
+bool ZygiskModule::tryUnload() const { return unload && dlclose(handle) == 0; }
 
 // -----------------------------------------------------------------
 
@@ -313,13 +311,20 @@ void ZygiskContext::run_modules_pre() {
 
 void ZygiskContext::run_modules_post() {
     flags |= POST_SPECIALIZE;
+
+    size_t modules_unloaded = 0;
     for (const auto &m : modules) {
         if (flags & APP_SPECIALIZE) {
             m.postAppSpecialize(args.app);
         } else if (flags & SERVER_FORK_AND_SPECIALIZE) {
             m.postServerSpecialize(args.server);
         }
-        m.tryUnload();
+        if (m.tryUnload()) modules_unloaded++;
+    }
+
+    if (modules.size() > 0) {
+        LOGD("modules unloaded: %zu/%zu", modules_unloaded, modules.size());
+        clean_trace("jit-cache-zygisk", modules.size(), modules_unloaded, true);
     }
 }
 

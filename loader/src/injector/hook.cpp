@@ -8,6 +8,7 @@
 #include <span>
 
 #include "art_method.hpp"
+#include "daemon.h"
 #include "jni_helper.hpp"
 #include "logging.h"
 #include "misc.hpp"
@@ -424,6 +425,7 @@ void hook_entry(void *start_addr, size_t block_size) {
     g_hook->start_addr = start_addr;
     g_hook->block_size = block_size;
     g_hook->hook_plt();
+    clean_trace(zygiskd::GetTmpPath().data(), 1, 0, false);
 }
 
 void hookJniNativeMethods(JNIEnv *env, const char *clz, JNINativeMethod *methods, int numMethods) {
