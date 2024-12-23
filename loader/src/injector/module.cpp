@@ -335,9 +335,8 @@ void ZygiskContext::app_specialize_pre() {
     if ((info_flags & UNMOUNT_MASK) == UNMOUNT_MASK) {
         LOGI("[%s] is on the denylist\n", process);
         flags |= DO_REVERT_UNMOUNT;
-    } else {
-        run_modules_pre();
     }
+    run_modules_pre();
 }
 
 void ZygiskContext::app_specialize_post() {
