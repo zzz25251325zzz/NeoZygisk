@@ -1,9 +1,11 @@
-#include "socket_utils.h"
+#include "socket_utils.hpp"
 
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <cstddef>
+
+#include "logging.hpp"
 
 namespace socket_utils {
 

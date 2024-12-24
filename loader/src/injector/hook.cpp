@@ -7,7 +7,7 @@
 #include <lsplt.hpp>
 
 #include "art_method.hpp"
-#include "daemon.h"
+#include "daemon.hpp"
 #include "jni_helper.hpp"
 #include "module.hpp"
 #include "zygisk.hpp"

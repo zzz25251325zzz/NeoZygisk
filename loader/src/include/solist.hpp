@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "elf_util.h"
+#include "elf_util.hpp"
 
 namespace SoList {
 class SoInfo {

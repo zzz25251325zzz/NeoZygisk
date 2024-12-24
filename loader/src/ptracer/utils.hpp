@@ -1,16 +1,7 @@
 #pragma once
-#include <string>
 #include <sys/ptrace.h>
-#include <map>
 
-#include "daemon.h"
-
-#ifdef __LP64__
-#define LOG_TAG "zygisk-ptrace64"
-#else
-#define LOG_TAG "zygisk-ptrace32"
-#endif
-#include "logging.h"
+#include <string>
 
 struct MapInfo {
     /// \brief The start address of the memory region.
@@ -38,7 +29,7 @@ struct MapInfo {
     /// \brief Scans /proc/self/maps and returns a list of \ref MapInfo entries.
     /// This is useful to find out the inode of the library to hook.
     /// \return A list of \ref MapInfo entries.
-    static std::vector<MapInfo> Scan(const std::string& pid = "self");
+    static std::vector<MapInfo> Scan(const std::string &pid = "self");
 };
 
 #if defined(__x86_64__)
@@ -72,30 +63,29 @@ std::string get_addr_mem_region(std::vector<MapInfo> &info, uintptr_t addr);
 
 void *find_module_base(std::vector<MapInfo> &info, std::string_view suffix);
 
-void *find_func_addr(
-        std::vector<MapInfo> &local_info,
-        std::vector<MapInfo> &remote_info,
-        std::string_view module,
-        std::string_view func);
+void *find_func_addr(std::vector<MapInfo> &local_info, std::vector<MapInfo> &remote_info,
+                     std::string_view module, std::string_view func);
 
 void align_stack(struct user_regs_struct &regs, long preserve = 0);
 
 uintptr_t push_string(int pid, struct user_regs_struct &regs, const char *str);
 
-uintptr_t remote_call(int pid, struct user_regs_struct &regs, uintptr_t func_addr, uintptr_t return_addr,
-                 std::vector<long> &args);
+uintptr_t remote_call(int pid, struct user_regs_struct &regs, uintptr_t func_addr,
+                      uintptr_t return_addr, std::vector<long> &args);
 
 int fork_dont_care();
 
-void wait_for_trace(int pid, int* status, int flags);
+void wait_for_trace(int pid, int *status, int flags);
 
 std::string parse_status(int status);
 
 #define WPTEVENT(x) (x >> 16)
 
-#define CASE_CONST_RETURN(x) case x: return #x;
+#define CASE_CONST_RETURN(x)                                                                       \
+    case x:                                                                                        \
+        return #x;
 
-inline const char* parse_ptrace_event(int status) {
+inline const char *parse_ptrace_event(int status) {
     status = status >> 16;
     switch (status) {
         CASE_CONST_RETURN(PTRACE_EVENT_FORK)
@@ -106,12 +96,12 @@ inline const char* parse_ptrace_event(int status) {
         CASE_CONST_RETURN(PTRACE_EVENT_EXIT)
         CASE_CONST_RETURN(PTRACE_EVENT_SECCOMP)
         CASE_CONST_RETURN(PTRACE_EVENT_STOP)
-        default:
-            return "(no event)";
+    default:
+        return "(no event)";
     }
 }
 
-inline const char* sigabbrev_np(int sig) {
+inline const char *sigabbrev_np(int sig) {
     if (sig > 0 && sig < NSIG) return sys_signame[sig];
     return "(unknown)";
 }

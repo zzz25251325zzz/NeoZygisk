@@ -17,7 +17,7 @@
  * Copyright (C) 2019 Swift Gan
  * Copyright (C) 2021 LSPosed Contributors
  */
-#include "elf_util.h"
+#include "elf_util.hpp"
 
 #include <fcntl.h>
 #include <malloc.h>

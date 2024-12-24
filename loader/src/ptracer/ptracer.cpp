@@ -16,7 +16,9 @@
 #include <string>
 #include <vector>
 
+#include "daemon.hpp"
 #include "utils.hpp"
+#include "logging.hpp"
 
 bool inject_on_main(int pid, const char *lib_path) {
     LOGI("injecting %s to zygote %d", lib_path, pid);

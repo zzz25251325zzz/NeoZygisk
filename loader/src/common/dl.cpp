@@ -1,10 +1,10 @@
-#include "dl.h"
+#include "dl.hpp"
 
 #include <android/dlext.h>
 #include <dlfcn.h>
 #include <libgen.h>
 
-#include "logging.h"
+#include "logging.hpp"
 
 extern "C" [[gnu::weak]] struct android_namespace_t*
 // NOLINTNEXTLINE

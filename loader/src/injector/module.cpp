@@ -9,10 +9,10 @@
 
 #include <lsplt.hpp>
 
-#include "daemon.h"
+#include "daemon.hpp"
 #include "dl.hpp"
 #include "files.hpp"
-#include "logging.h"
+#include "logging.hpp"
 #include "misc.hpp"
 #include "zygisk.hpp"
 

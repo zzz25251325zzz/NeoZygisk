@@ -3,8 +3,6 @@
 #include <string>
 #include <string_view>
 
-#include "logging.h"
-
 namespace socket_utils {
 
     ssize_t xread(int fd, void *buf, size_t count);

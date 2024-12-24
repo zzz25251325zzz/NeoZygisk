@@ -8,7 +8,7 @@
 
 #include "main.hpp"
 #include "utils.hpp"
-#include "daemon.h"
+#include "daemon.hpp"
 #include <sys/mount.h>
 
 using namespace std::string_view_literals;

@@ -15,7 +15,9 @@
 
 #include <set>
 
+#include "daemon.hpp"
 #include "files.hpp"
+#include "logging.hpp"
 #include "main.hpp"
 #include "utils.hpp"
 

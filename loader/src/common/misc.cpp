@@ -1,4 +1,5 @@
 #include "misc.hpp"
+#include "logging.hpp"
 
 int new_daemon_thread(thread_entry entry, void *arg) {
     pthread_t thread;

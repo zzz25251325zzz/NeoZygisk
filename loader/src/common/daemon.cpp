@@ -1,11 +1,11 @@
-#include "daemon.h"
+#include "daemon.hpp"
 
 #include <linux/un.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "socket_utils.h"
-#include "logging.h"
+#include "socket_utils.hpp"
+#include "logging.hpp"
 
 namespace zygiskd {
 static std::string TMP_PATH;

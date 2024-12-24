@@ -23,7 +23,7 @@
 #include <sys/stat.h>
 
 #include "utils.hpp"
-#include "logging.h"
+#include "logging.hpp"
 #include <sched.h>
 #include <fcntl.h>
 

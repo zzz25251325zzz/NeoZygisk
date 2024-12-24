@@ -1,5 +1,5 @@
-#include "daemon.h"
-#include "logging.h"
+#include "daemon.hpp"
+#include "logging.hpp"
 #include "zygisk.hpp"
 
 using namespace std;
