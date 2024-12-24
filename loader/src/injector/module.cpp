@@ -10,7 +10,7 @@
 #include <lsplt.hpp>
 
 #include "daemon.h"
-#include "dl.h"
+#include "dl.hpp"
 #include "files.hpp"
 #include "logging.h"
 #include "misc.hpp"
@@ -187,8 +187,6 @@ bool ZygiskContext::plt_hook_commit() {
 // -----------------------------------------------------------------
 
 void ZygiskContext::sanitize_fds() {
-    // TODO: zygisk_close_logd();
-
     if (!is_child()) {
         return;
     }
@@ -276,10 +274,6 @@ void ZygiskContext::fork_pre() {
     }
     // The dirfd will be closed once out of scope
     allowed_fds[dirfd(dir.get())] = false;
-    // TODO: logd_fd should be handled separately
-    /* if (int fd = zygisk_get_logd(); fd >= 0) { */
-    /*     allowed_fds[fd] = false; */
-    /* } */
 }
 
 void ZygiskContext::fork_post() {

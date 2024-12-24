@@ -98,15 +98,6 @@ pub fn chcon(path: &str, context: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn log_raw(level: i32, tag: &str, message: &str) -> Result<()> {
-    let tag = CString::new(tag)?;
-    let message = CString::new(message)?;
-    unsafe {
-        __android_log_print(level, tag.as_ptr(), message.as_ptr());
-    }
-    Ok(())
-}
-
 pub fn get_property(name: &str) -> Result<String> {
     let name = CString::new(name)?;
     let mut buf = vec![0u8; 92];

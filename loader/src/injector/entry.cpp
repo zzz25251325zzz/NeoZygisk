@@ -15,10 +15,6 @@ void entry(void *addr, size_t size, const char *path) {
         return;
     }
 
-#ifdef NDEBUG
-    logging::setfd(zygiskd::RequestLogcatFd());
-#endif
-
     LOGI("Start hooking");
     hook_entry(addr, size);
 }

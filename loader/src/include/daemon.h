@@ -1,26 +1,30 @@
 #pragma once
 
-#include <string_view>
-#include <string>
 #include <unistd.h>
+
+#include <string>
+#include <string_view>
 #include <vector>
 
 #if defined(__LP64__)
-# define LP_SELECT(lp32, lp64) lp64
+#define LP_SELECT(lp32, lp64) lp64
 #else
-# define LP_SELECT(lp32, lp64) lp32
+#define LP_SELECT(lp32, lp64) lp32
 #endif
 
 constexpr auto kCPSocketName = "/" LP_SELECT("cp32", "cp64") ".sock";
 
 class UniqueFd {
     using Fd = int;
+
 public:
     UniqueFd() = default;
 
     UniqueFd(Fd fd) : fd_(fd) {}
 
-    ~UniqueFd() { if (fd_ >= 0) close(fd_); }
+    ~UniqueFd() {
+        if (fd_ >= 0) close(fd_);
+    }
 
     // Disallow copy
     UniqueFd(const UniqueFd&) = delete;
@@ -44,41 +48,38 @@ private:
 
 namespace zygiskd {
 
-    struct Module {
-        std::string name;
-        UniqueFd memfd;
+struct Module {
+    std::string name;
+    UniqueFd memfd;
 
-        inline explicit Module(std::string name, int memfd) : name(name), memfd(memfd) {}
-    };
+    inline explicit Module(std::string name, int memfd) : name(name), memfd(memfd) {}
+};
 
-    enum class SocketAction {
-        PingHeartBeat,
-        RequestLogcatFd,
-        GetProcessFlags,
-        ReadModules,
-        RequestCompanionSocket,
-        GetModuleDir,
-        ZygoteRestart,
-        SystemServerStarted,
-    };
+enum class SocketAction {
+    PingHeartBeat,
+    GetProcessFlags,
+    ReadModules,
+    RequestCompanionSocket,
+    GetModuleDir,
+    ZygoteRestart,
+    SystemServerStarted,
+};
 
-    void Init(const char *path);
+void Init(const char* path);
 
-    std::string GetTmpPath();
+std::string GetTmpPath();
 
-    bool PingHeartbeat();
+bool PingHeartbeat();
 
-    int RequestLogcatFd();
+std::vector<Module> ReadModules();
 
-    std::vector<Module> ReadModules();
+uint32_t GetProcessFlags(uid_t uid);
 
-    uint32_t GetProcessFlags(uid_t uid);
+int ConnectCompanion(size_t index);
 
-    int ConnectCompanion(size_t index);
+int GetModuleDir(size_t index);
 
-    int GetModuleDir(size_t index);
+void ZygoteRestart();
 
-    void ZygoteRestart();
-
-    void SystemServerStarted();
-}
+void SystemServerStarted();
+}  // namespace zygiskd

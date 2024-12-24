@@ -236,15 +236,6 @@ fn handle_daemon_action(
     context: &Context,
 ) -> Result<()> {
     match action {
-        DaemonSocketAction::RequestLogcatFd => loop {
-            let level = match stream.read_u8() {
-                Ok(level) => level,
-                Err(_) => break,
-            };
-            let tag = stream.read_string()?;
-            let message = stream.read_string()?;
-            utils::log_raw(level as i32, &tag, &message)?;
-        },
         DaemonSocketAction::GetProcessFlags => {
             let uid = stream.read_u32()? as i32;
             let mut flags = ProcessFlags::empty();

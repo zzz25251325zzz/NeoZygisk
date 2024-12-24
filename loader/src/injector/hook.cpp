@@ -9,7 +9,6 @@
 #include "art_method.hpp"
 #include "daemon.h"
 #include "jni_helper.hpp"
-#include "logging.h"
 #include "module.hpp"
 #include "zygisk.hpp"
 
@@ -121,25 +120,6 @@ DCL_HOOK_FUNC(static int, unshare, int flags) {
     return res;
 }
 
-// This is the last moment before the secontext of the process changes
-DCL_HOOK_FUNC(static int, selinux_android_setcontext, uid_t uid, bool isSystemServer,
-              const char *seinfo, const char *pkgname) {
-    // Pre-fetch logd before secontext transition
-    // TODO: zygisk_get_logd();
-    return old_selinux_android_setcontext(uid, isSystemServer, seinfo, pkgname);
-}
-
-// Close file descriptors to prevent crashing
-DCL_HOOK_FUNC(static void, android_log_close) {
-    if (g_ctx == nullptr || !(g_ctx->flags & SKIP_CLOSE_LOG_PIPE)) {
-        // This happens during forks like nativeForkApp, nativeForkUsap,
-        // nativeForkSystemServer, and nativeForkAndSpecialize.
-        // TODO: zygisk_close_logd();
-        logging::setfd(-1);
-    }
-    old_android_log_close();
-}
-
 // We cannot directly call `munmap` to unload ourselves, otherwise when `munmap` returns,
 // it will return to our code which has been unmapped, causing segmentation fault.
 // Instead, we hook `pthread_attr_setstacksize` which will be called when VM daemon threads start.
@@ -161,7 +141,7 @@ DCL_HOOK_FUNC(static int, pthread_attr_setstacksize, void *target, size_t size) 
             // Because both `pthread_attr_setstacksize` and `munmap` have the same function
             // signature, we can use `musttail` to let the compiler reuse our stack frame and thus
             // `munmap` will directly return to the caller of `pthread_attr_setstacksize`.
-            LOGI("unmap libzygisk.so loaded at %p with size %zu", start_addr, block_size);
+            LOGD("unmap libzygisk.so loaded at %p with size %zu", start_addr, block_size);
             [[clang::musttail]] return munmap(start_addr, block_size);
         }
     }
@@ -192,9 +172,6 @@ ZygiskContext::~ZygiskContext() {
     g_ctx = nullptr;
 
     if (!is_child()) return;
-
-    // TODO: zygisk_close_logd();
-    // TODO: android_logging();
 
     // Strip out all API function pointers
     for (auto &m : modules) {
@@ -259,10 +236,7 @@ void HookContext::hook_plt() {
 
     PLT_HOOK_REGISTER(android_runtime_dev, android_runtime_inode, fork);
     PLT_HOOK_REGISTER(android_runtime_dev, android_runtime_inode, unshare);
-    PLT_HOOK_REGISTER(android_runtime_dev, android_runtime_inode, selinux_android_setcontext);
     PLT_HOOK_REGISTER(android_runtime_dev, android_runtime_inode, strdup);
-    PLT_HOOK_REGISTER_SYM(android_runtime_dev, android_runtime_inode, "__android_log_close",
-                          android_log_close);
 
     if (!lsplt::CommitHook(cached_map_infos)) LOGE("plt_hook failed\n");
 
