@@ -2,26 +2,22 @@
 name = "zygiskd"
 authors = ["JingMatrix", "Nullptr"]
 version = "1.0.0"
-edition = "2021"
-rust-version = "1.69"
+edition = "2024"
+rust-version = "1.85"
 
 [dependencies]
-android_logger = "0.13"
+android_logger = "0.14"
 anyhow = { version = "1.0", features = ["backtrace"] }
-bitflags = { version = "2.3" }
-const_format = "0.2"
-futures = "0.3"
+bitflags = { version = "2.6" }
 konst = "0.3"
-lazy_static = "1.4"
 libc = "0.2"
 log = "0.4"
 memfd = "0.6"
-num_enum = "0.5"
+num_enum = "0.7"
 passfd = "0.1"
 proc-maps = "0.3"
 
-rustix = { version = "0.38", features = [ "fs", "process", "mount", "net", "thread" ] }
-tokio = { version = "1.28", features = ["full"] }
+rustix = { version = "0.38", features = [ "fs", "net", "thread" ] }
 
 [profile.dev]
 strip = false

@@ -7,7 +7,7 @@ use rustix::path::Arg;
 use rustix::thread::gettid;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::os::fd::{AsFd, AsRawFd};
-use std::os::unix::net::{UnixListener};
+use std::os::unix::net::UnixListener;
 use std::process::Command;
 use std::sync::OnceLock;
 use std::{
@@ -106,34 +106,6 @@ pub fn get_property(name: &str) -> Result<String> {
         CStr::from_bytes_until_nul(&buf)?
     };
     Ok(prop.to_string_lossy().to_string())
-}
-
-#[allow(dead_code)]
-pub fn set_property(name: &str, value: &str) -> Result<()> {
-    let name = CString::new(name)?;
-    let value = CString::new(value)?;
-    unsafe {
-        __system_property_set(name.as_ptr(), value.as_ptr());
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-pub fn wait_property(name: &str, serial: u32) -> Result<u32> {
-    let name = CString::new(name)?;
-    let info = unsafe { __system_property_find(name.as_ptr()) };
-    let mut serial = serial;
-    unsafe {
-        __system_property_wait(info, serial, &mut serial, std::ptr::null());
-    }
-    Ok(serial)
-}
-
-#[allow(dead_code)]
-pub fn get_property_serial(name: &str) -> Result<u32> {
-    let name = CString::new(name)?;
-    let info = unsafe { __system_property_find(name.as_ptr()) };
-    Ok(unsafe { __system_property_serial(info) })
 }
 
 pub fn switch_mount_namespace(pid: i32) -> Result<()> {
@@ -240,7 +212,7 @@ pub fn check_unix_socket(stream: &UnixStream, block: bool) -> bool {
     return true;
 }
 
-extern "C" {
+unsafe extern "C" {
     fn __android_log_print(prio: i32, tag: *const c_char, fmt: *const c_char, ...) -> i32;
     fn __system_property_get(name: *const c_char, value: *mut c_char) -> u32;
     fn __system_property_set(name: *const c_char, value: *const c_char) -> u32;
