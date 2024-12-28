@@ -1,11 +1,14 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
+use log::{debug, error};
+use procfs::process::Process;
 use rustix::net::{
-    bind_unix, connect_unix, listen, sendto_unix, socket, AddressFamily, SendFlags, SocketAddrUnix,
-    SocketType,
+    AddressFamily, SendFlags, SocketAddrUnix, SocketType, bind_unix, connect_unix, listen,
+    sendto_unix, socket,
 };
 use rustix::path::Arg;
 use rustix::thread::gettid;
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_char, c_void};
+use std::io::Error;
 use std::os::fd::{AsFd, AsRawFd};
 use std::os::unix::net::UnixListener;
 use std::process::Command;
@@ -15,6 +18,8 @@ use std::{
     io::{Read, Write},
     os::unix::net::UnixStream,
 };
+
+use crate::root_impl;
 
 #[cfg(target_pointer_width = "64")]
 #[macro_export]
@@ -114,6 +119,125 @@ pub fn switch_mount_namespace(pid: i32) -> Result<()> {
     rustix::thread::move_into_link_name_space(mnt.as_fd(), None)?;
     std::env::set_current_dir(cwd)?;
     Ok(())
+}
+
+// cache a clean mount namespace for all application process
+static CLEAN_MNT_NS_FD: LateInit<i32> = LateInit::new();
+
+// Use `man 7 namespaces` to read the Linux manual about namespaces.
+// In the section `The /proc/pid/ns/ directory`, it is explained that:
+// opening one of the files in this directory (or a file that is bind
+// mounted to one of these files) returns a file handle for the corresponding
+// namespace of the process specified by pid. As long as this file descriptor
+// remains open, the namespace will remain alive, even if all processes in the
+// namespace terminate.
+pub fn get_clean_mount_namespace(pid: i32) -> Result<i32> {
+    // We shall use CLEAN_MNT_NS_FD to keep the namespace file handle.
+    if !CLEAN_MNT_NS_FD.initiated() {
+        // Use a pipe to keep the forked child process open
+        // till the namespace is read.
+
+        let mut pipes = [0; 2];
+        unsafe {
+            libc::pipe(pipes.as_mut_ptr());
+        }
+        let (reader, writer) = (pipes[0], pipes[1]);
+        match unsafe { libc::fork() } {
+            0 => {
+                // Child process
+                switch_mount_namespace(pid)?;
+                revert_unmount()?;
+                write_int(writer, 0)?;
+                read_int(reader)?;
+                std::process::exit(0);
+            }
+            child if child > 0 => {
+                // Parent process
+                read_int(reader)?;
+                let ns_path = format!("/proc/{}/ns/mnt", child);
+                let ns_file = fs::OpenOptions::new().read(true).open(&ns_path)?;
+                write_int(writer, 0)?;
+                unsafe {
+                    if libc::close(reader) == -1
+                        || libc::close(writer) == -1
+                        || libc::waitpid(child, std::ptr::null_mut(), 0) == -1
+                    {
+                        bail!(Error::last_os_error());
+                    }
+                };
+                CLEAN_MNT_NS_FD.init(ns_file.as_raw_fd());
+                std::mem::forget(ns_file);
+            }
+            _ => bail!(Error::last_os_error()),
+        }
+    }
+    Ok(*CLEAN_MNT_NS_FD)
+}
+
+fn revert_unmount() -> Result<()> {
+    let mount_infos = Process::myself().unwrap().mountinfo().unwrap();
+    let mut targets: Vec<String> = Vec::new();
+    let root_implementation = root_impl::get_impl();
+    for info in mount_infos {
+        let path = info.mount_point.to_str().unwrap().to_string();
+        let should_unmount: bool = match root_implementation {
+            root_impl::RootImpl::Magisk => {
+                info.mount_source == Some("magisk".to_string())
+                    || info.root.starts_with("/adb/modules")
+            }
+            root_impl::RootImpl::KernelSU => {
+                info.mount_source == Some("KSU".to_string())
+                    || info.root.starts_with("/adb/modules")
+                    || path.starts_with("/data/adb/modules")
+            }
+            _ => panic!("wrong root impl: {:?}", root_impl::get_impl()),
+        };
+        if should_unmount {
+            targets.push(path);
+        }
+    }
+    targets.reverse();
+    for path in targets {
+        unsafe {
+            if libc::umount2(CString::new(path.clone())?.as_ptr(), libc::MNT_DETACH) == -1 {
+                error!("failed to to unmount {}", path);
+                bail!(Error::last_os_error());
+            } else {
+                debug!("Unmounted {}", path);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_int(fd: libc::c_int, value: i32) -> Result<()> {
+    unsafe {
+        if libc::write(
+            fd,
+            &value as *const _ as *const c_void,
+            std::mem::size_of::<i32>(),
+        ) == -1
+        {
+            bail!(Error::last_os_error());
+        }
+    };
+    Ok(())
+}
+
+fn read_int(fd: libc::c_int) -> Result<i32> {
+    let mut buf = [0u8; 4];
+    unsafe {
+        if libc::read(
+            fd,
+            buf.as_mut_ptr() as *mut c_void,
+            std::mem::size_of::<i32>(),
+        ) == -1
+        {
+            bail!(Error::last_os_error());
+        }
+    };
+    let value = i32::from_le_bytes(buf);
+    Ok(value)
 }
 
 pub trait UnixStreamExt {

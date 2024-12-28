@@ -33,5 +33,3 @@ Current root solutions of Android are implemented in a systmeless way, meaning t
 1. For applications granted with root privilege, both root solutions mount points and modules mount points are present in their mount namespaces.
 2. For applications without root privilege and not on the DenyList, only modules mount points are present in their mount namespaces. As an example, this is the ideal configuration for applying font customization modules to their target applications.
 3. For applications on the DenyList, their root privilege will be dropped even granted intentionally. A clean mount namespace will be provided for them to hide the traces of root solutions.
-
-The DenyList implementation of NeoZygisk is still working in process, please stay tuned.

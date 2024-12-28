@@ -103,17 +103,15 @@ DCL_HOOK_FUNC(int, fork) { return (g_ctx && g_ctx->pid >= 0) ? g_ctx->pid : old_
 DCL_HOOK_FUNC(static int, unshare, int flags) {
     int res = old_unshare(flags);
     if (g_ctx && (flags & CLONE_NEWNS) != 0 && res == 0 &&
-        // For some unknown reason, unmounting app_process in SysUI can break.
-        // This is reproducible on the official AVD running API 26 and 27.
-        // Simply avoid doing any unmounts for SysUI to avoid potential issues.
-        (g_ctx->info_flags & PROCESS_IS_SYS_UI) == 0) {
+        // For some unknown reason, unmounting the first application process can break.
+        // Simply avoid doing any unmounts for it to avoid potential issues.
+        (g_ctx->info_flags & IS_FIRST_PROCESS) == 0) {
         if (g_ctx->flags & DO_REVERT_UNMOUNT) {
-            if (g_ctx->info_flags & PROCESS_ROOT_IS_KSU) {
-                revert_unmount_ksu();
-            } else if (g_ctx->info_flags & PROCESS_ROOT_IS_MAGISK) {
-                revert_unmount_magisk();
-            }
+            clean_mnt_ns(getpid());
+        } else if (!(g_ctx->info_flags & (PROCESS_IS_MANAGER | PROCESS_GRANTED_ROOT))) {
+            unmount_root(g_hook->cached_mount_infos, false);
         }
+        old_unshare(CLONE_NEWNS);
         // Restore errno back to 0
         errno = 0;
     }
@@ -377,6 +375,8 @@ void HookContext::restore_zygote_hook(JNIEnv *env) {
 void hook_entry(void *start_addr, size_t block_size) {
     g_hook = new HookContext(start_addr, block_size);
     g_hook->hook_plt();
+    g_hook->cached_mount_infos = parse_mount_info("self");
+    unmount_root(g_hook->cached_mount_infos, true);
     clean_trace(zygiskd::GetTmpPath().data(), 1, 0, false);
 }
 

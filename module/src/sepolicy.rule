@@ -1,6 +1,13 @@
 type magisk_file file_type
 typeattribute magisk_file mlstrustedobject
-allow zygote magisk_file sock_file *
+allow zygote magisk_file sock_file {read write}
+
+allow zygote magisk lnk_file read
+allow zygote unlabeled file {read open}
+allow zygote zygote capability sys_chroot
+allow zygote su dir search
+allow zygote su lnk_file read
+allow zygote su file read
 
 allow zygote adb_data_file dir search
 allow zygote zygote process execmem

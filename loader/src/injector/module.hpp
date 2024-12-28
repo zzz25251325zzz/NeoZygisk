@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "api.hpp"
+#include "files.hpp"
 #include "lsplt.hpp"
 
 struct ZygiskContext;
@@ -149,9 +150,9 @@ enum : uint32_t {
     PROCESS_IS_MANAGER = (1u << 28),
     PROCESS_ROOT_IS_KSU = (1u << 29),
     PROCESS_ROOT_IS_MAGISK = (1u << 30),
-    PROCESS_IS_SYS_UI = (1u << 31),
+    IS_FIRST_PROCESS = (1u << 31),
 
-    PRIVATE_MASK = PROCESS_IS_SYS_UI,
+    PRIVATE_MASK = IS_FIRST_PROCESS,
     UNMOUNT_MASK = PROCESS_ON_DENYLIST
 };
 
@@ -261,7 +262,7 @@ struct ZygiskContext {
     const char *process;
     std::list<ZygiskModule> modules;
 
-    int pid;
+    pid_t pid;
     uint32_t flags;
     uint32_t info_flags;
     std::bitset<MAX_FD_SIZE> allowed_fds;
@@ -322,6 +323,7 @@ struct HookContext {
     jint MODIFIER_NATIVE = 0;
     jmethodID member_getModifiers = nullptr;
     std::vector<lsplt::MapInfo> cached_map_infos = {};
+    std::vector<mount_info> cached_mount_infos = {};
     std::vector<std::tuple<dev_t, ino_t, const char *, void **>> plt_backup;
 
     HookContext(void *start_addr, size_t block_size);

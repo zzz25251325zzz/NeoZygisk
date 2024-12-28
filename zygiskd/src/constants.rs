@@ -26,6 +26,7 @@ pub const SYSTEM_SERVER_STARTED: i32 = 10;
 pub enum DaemonSocketAction {
     PingHeartbeat,
     GetProcessFlags,
+    GetCleanMountNamespace,
     ReadModules,
     RequestCompanionSocket,
     GetModuleDir,
@@ -42,6 +43,6 @@ bitflags! {
         const PROCESS_IS_MANAGER = 1 << 28;
         const PROCESS_ROOT_IS_KSU = 1 << 29;
         const PROCESS_ROOT_IS_MAGISK = 1 << 30;
-        const PROCESS_IS_SYS_UI = 1 << 31;
+        const IS_FIRST_PROCESS = 1 << 31;
     }
 }

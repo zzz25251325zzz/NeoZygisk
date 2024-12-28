@@ -1,5 +1,5 @@
 use crate::constants::{DaemonSocketAction, ProcessFlags};
-use crate::utils::{check_unix_socket, LateInit, UnixStreamExt};
+use crate::utils::{check_unix_socket, get_clean_mount_namespace, LateInit, UnixStreamExt};
 use crate::{constants, lp_select, root_impl, utils};
 use anyhow::{bail, Result};
 use log::{debug, error, info, trace, warn};
@@ -32,6 +32,7 @@ struct Context {
 static TMP_PATH: LateInit<String> = LateInit::new();
 static CONTROLLER_SOCKET: LateInit<String> = LateInit::new();
 static PATH_CP_NAME: LateInit<String> = LateInit::new();
+static IS_FIRST_PROCESS: LateInit<bool> = LateInit::new();
 
 pub fn main() -> Result<()> {
     info!("Welcome to NeoZygisk ({}) !", constants::ZKSU_VERSION);
@@ -239,9 +240,14 @@ fn handle_daemon_action(
         DaemonSocketAction::GetProcessFlags => {
             let uid = stream.read_u32()? as i32;
             let mut flags = ProcessFlags::empty();
-            if root_impl::uid_is_systemui(uid) {
-                flags |= ProcessFlags::PROCESS_IS_SYS_UI;
-                trace!("Uid {} is systemui", uid,);
+            if !IS_FIRST_PROCESS.initiated() {
+                flags |= ProcessFlags::IS_FIRST_PROCESS;
+                if root_impl::uid_is_systemui(uid) {
+                    trace!("Uid {} is systemui", uid,);
+                } else {
+                    trace!("Uid {} is the first app process", uid,);
+                    IS_FIRST_PROCESS.init(false);
+                }
             } else if root_impl::uid_is_manager(uid) {
                 flags |= ProcessFlags::PROCESS_IS_MANAGER;
                 trace!("Uid {} is manager", uid,);
@@ -269,6 +275,12 @@ fn handle_daemon_action(
                 flags.contains(ProcessFlags::PROCESS_ON_DENYLIST)
             );
             stream.write_u32(flags.bits())?;
+        }
+        DaemonSocketAction::GetCleanMountNamespace => {
+            let pid = stream.read_u32()?;
+            stream.write_u32(unsafe { libc::getpid() } as u32)?;
+            let fd = get_clean_mount_namespace(pid as i32)?;
+            stream.write_u32(fd as u32)?;
         }
         DaemonSocketAction::ReadModules => {
             stream.write_usize(context.modules.len())?;
