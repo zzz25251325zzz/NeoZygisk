@@ -56,14 +56,15 @@ uint32_t GetProcessFlags(uid_t uid) {
     return socket_utils::read_u32(fd);
 }
 
-std::string GetCleanMountNamespace(pid_t pid) {
+std::string UpdateMountNamespace(pid_t pid, bool clean) {
     UniqueFd fd = Connect(1);
     if (fd == -1) {
-        PLOGE("GetCleanMountNamespace");
+        PLOGE("UpdateMountNamespace");
         return "";
     }
-    socket_utils::write_u8(fd, (uint8_t) SocketAction::GetCleanMountNamespace);
+    socket_utils::write_u8(fd, (uint8_t) SocketAction::UpdateMountNamespace);
     socket_utils::write_u32(fd, (uint32_t) pid);
+    socket_utils::write_u8(fd, (uint8_t) clean);
     uint32_t target_pid = socket_utils::read_u32(fd);
     int target_fd = (int) socket_utils::read_u32(fd);
     if (target_fd == 0) return "";

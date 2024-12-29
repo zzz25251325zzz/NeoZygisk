@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use log::{debug, error};
+use log::{debug, error, trace};
 use procfs::process::Process;
 use rustix::net::{
     AddressFamily, SendFlags, SocketAddrUnix, SocketType, bind_unix, connect_unix, listen,
@@ -121,8 +121,9 @@ pub fn switch_mount_namespace(pid: i32) -> Result<()> {
     Ok(())
 }
 
-// cache a clean mount namespace for all application process
+// save mount namespaces for all application process
 static CLEAN_MNT_NS_FD: LateInit<i32> = LateInit::new();
+static ROOT_MNT_NS_FD: LateInit<i32> = LateInit::new();
 
 // Use `man 7 namespaces` to read the Linux manual about namespaces.
 // In the section `The /proc/pid/ns/ directory`, it is explained that:
@@ -131,9 +132,9 @@ static CLEAN_MNT_NS_FD: LateInit<i32> = LateInit::new();
 // namespace of the process specified by pid. As long as this file descriptor
 // remains open, the namespace will remain alive, even if all processes in the
 // namespace terminate.
-pub fn get_clean_mount_namespace(pid: i32) -> Result<i32> {
-    // We shall use CLEAN_MNT_NS_FD to keep the namespace file handle.
-    if !CLEAN_MNT_NS_FD.initiated() {
+pub fn save_mount_namespace(pid: i32, clean: bool) -> Result<i32> {
+    // We shall use CLEAN_MNT_NS_FD and ROOT_MNT_NS_FD to keep the namespace file handle.
+    if (clean && !CLEAN_MNT_NS_FD.initiated()) || (!clean && !ROOT_MNT_NS_FD.initiated()) {
         // Use a pipe to keep the forked child process open
         // till the namespace is read.
 
@@ -146,17 +147,29 @@ pub fn get_clean_mount_namespace(pid: i32) -> Result<i32> {
             0 => {
                 // Child process
                 switch_mount_namespace(pid)?;
-                revert_unmount()?;
-                write_int(writer, 0)?;
-                read_int(reader)?;
+                if clean {
+                    unsafe {
+                        libc::unshare(libc::CLONE_NEWNS);
+                    }
+                    revert_unmount()?;
+                }
+                let mut mypid = 0;
+                while mypid != unsafe { libc::getpid() } {
+                    write_int(writer, 0)?;
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    mypid = read_int(reader)?;
+                }
                 std::process::exit(0);
             }
             child if child > 0 => {
                 // Parent process
-                read_int(reader)?;
+                trace!("waiting {child} to update mount namespace");
+                if read_int(reader)? == 0 {
+                    trace!("{child} finished updating mount namespace");
+                }
                 let ns_path = format!("/proc/{}/ns/mnt", child);
                 let ns_file = fs::OpenOptions::new().read(true).open(&ns_path)?;
-                write_int(writer, 0)?;
+                write_int(writer, child)?;
                 unsafe {
                     if libc::close(reader) == -1
                         || libc::close(writer) == -1
@@ -165,13 +178,27 @@ pub fn get_clean_mount_namespace(pid: i32) -> Result<i32> {
                         bail!(Error::last_os_error());
                     }
                 };
-                CLEAN_MNT_NS_FD.init(ns_file.as_raw_fd());
+                if clean {
+                    CLEAN_MNT_NS_FD.init(ns_file.as_raw_fd());
+                    trace!("CLEAN_MNT_NS_FD updated to {}", *CLEAN_MNT_NS_FD);
+                } else {
+                    ROOT_MNT_NS_FD.init(ns_file.as_raw_fd());
+                    trace!("ROOT_MNT_NS_FD updated to {}", *ROOT_MNT_NS_FD);
+                }
                 std::mem::forget(ns_file);
             }
             _ => bail!(Error::last_os_error()),
         }
     }
-    Ok(*CLEAN_MNT_NS_FD)
+
+    if clean && CLEAN_MNT_NS_FD.initiated() {
+        Ok(*CLEAN_MNT_NS_FD)
+    } else if !clean && ROOT_MNT_NS_FD.initiated() {
+        Ok(*ROOT_MNT_NS_FD)
+    } else {
+        error!("failed to save_mount_namespace({pid}, {clean})");
+        Ok(0)
+    }
 }
 
 fn revert_unmount() -> Result<()> {

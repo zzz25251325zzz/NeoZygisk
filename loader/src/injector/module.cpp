@@ -326,6 +326,9 @@ void ZygiskContext::app_specialize_pre() {
     flags |= APP_SPECIALIZE;
 
     info_flags = zygiskd::GetProcessFlags(g_ctx->args.app->uid);
+    if (info_flags & IS_FIRST_PROCESS) {
+        update_mnt_ns(getpid(), true, true);
+    }
     if ((info_flags & UNMOUNT_MASK) == UNMOUNT_MASK) {
         LOGI("[%s] is on the denylist\n", process);
         flags |= DO_REVERT_UNMOUNT;
@@ -391,6 +394,9 @@ void ZygiskContext::nativeForkAndSpecialize_pre() {
     process = env->GetStringUTFChars(args.app->nice_name, nullptr);
     LOGV("pre forkAndSpecialize [%s]\n", process);
     flags |= APP_FORK_AND_SPECIALIZE;
+
+    // unmount the root implementation for Zygote
+    update_mnt_ns(getpid(), true, false);
 
     fork_pre();
     if (is_child()) {

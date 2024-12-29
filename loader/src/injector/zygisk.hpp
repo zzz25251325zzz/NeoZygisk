@@ -7,9 +7,9 @@
 
 void hook_entry(void *start_addr, size_t block_size);
 
-bool clean_mnt_ns(pid_t pid);
+bool update_mnt_ns(pid_t pid, bool clean, bool dry_run = false);
 
-void unmount_root(std::vector<mount_info> &mount_infos, bool dry_run);
+void mount_modules(std::vector<mount_info> &mount_infos, bool dry_run);
 
 void hookJniNativeMethods(JNIEnv *env, const char *clz, JNINativeMethod *methods, int numMethods);
 

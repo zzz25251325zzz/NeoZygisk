@@ -1,10 +1,10 @@
 use crate::constants::{DaemonSocketAction, ProcessFlags};
-use crate::utils::{check_unix_socket, get_clean_mount_namespace, LateInit, UnixStreamExt};
+use crate::utils::{LateInit, UnixStreamExt, check_unix_socket, save_mount_namespace};
 use crate::{constants, lp_select, root_impl, utils};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use log::{debug, error, info, trace, warn};
 use passfd::FdPassingExt;
-use rustix::fs::{fcntl_setfd, FdFlags};
+use rustix::fs::{FdFlags, fcntl_setfd};
 use std::fs;
 use std::io::Error;
 use std::ops::Deref;
@@ -15,7 +15,7 @@ use std::os::unix::{
     prelude::AsRawFd,
 };
 use std::path::PathBuf;
-use std::process::{exit, Command};
+use std::process::{Command, exit};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -105,6 +105,18 @@ pub fn main() -> Result<()> {
             DaemonSocketAction::SystemServerStarted => {
                 let value = constants::SYSTEM_SERVER_STARTED;
                 utils::unix_datagram_sendto(&CONTROLLER_SOCKET, &value.to_le_bytes())?;
+            }
+            DaemonSocketAction::UpdateMountNamespace => {
+                let pid = stream.read_u32()?;
+                let clean = stream.read_u8()?;
+                stream.write_u32(unsafe { libc::getpid() } as u32)?;
+                if clean == 1 {
+                    // we will only clean once, which is exactly the moment
+                    // to cache a root mount namespace
+                    save_mount_namespace(pid as i32, false)?;
+                }
+                let fd = save_mount_namespace(pid as i32, clean == 1)?;
+                stream.write_u32(fd as u32)?;
             }
             _ => {
                 thread::spawn(move || {
@@ -246,8 +258,8 @@ fn handle_daemon_action(
                     trace!("Uid {} is systemui", uid,);
                 } else {
                     trace!("Uid {} is the first app process", uid,);
-                    IS_FIRST_PROCESS.init(false);
                 }
+                IS_FIRST_PROCESS.init(false);
             } else if root_impl::uid_is_manager(uid) {
                 flags |= ProcessFlags::PROCESS_IS_MANAGER;
                 trace!("Uid {} is manager", uid,);
@@ -275,12 +287,6 @@ fn handle_daemon_action(
                 flags.contains(ProcessFlags::PROCESS_ON_DENYLIST)
             );
             stream.write_u32(flags.bits())?;
-        }
-        DaemonSocketAction::GetCleanMountNamespace => {
-            let pid = stream.read_u32()?;
-            stream.write_u32(unsafe { libc::getpid() } as u32)?;
-            let fd = get_clean_mount_namespace(pid as i32)?;
-            stream.write_u32(fd as u32)?;
         }
         DaemonSocketAction::ReadModules => {
             stream.write_usize(context.modules.len())?;

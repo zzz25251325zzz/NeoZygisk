@@ -58,7 +58,7 @@ struct Module {
 enum class SocketAction {
     PingHeartBeat,
     GetProcessFlags,
-    GetCleanMountNamespace,
+    UpdateMountNamespace,
     ReadModules,
     RequestCompanionSocket,
     GetModuleDir,
@@ -76,7 +76,7 @@ std::vector<Module> ReadModules();
 
 uint32_t GetProcessFlags(uid_t uid);
 
-std::string GetCleanMountNamespace(pid_t pid);
+std::string UpdateMountNamespace(pid_t pid, bool clean);
 
 int ConnectCompanion(size_t index);
 
