@@ -19,6 +19,7 @@ use std::{
     os::unix::net::UnixStream,
 };
 
+use crate::constants::MountNamespace;
 use crate::root_impl;
 
 #[cfg(target_pointer_width = "64")]
@@ -124,6 +125,7 @@ pub fn switch_mount_namespace(pid: i32) -> Result<()> {
 // save mount namespaces for all application process
 static CLEAN_MNT_NS_FD: LateInit<i32> = LateInit::new();
 static ROOT_MNT_NS_FD: LateInit<i32> = LateInit::new();
+static MODULE_MNT_NS_FD: LateInit<i32> = LateInit::new();
 
 // Use `man 7 namespaces` to read the Linux manual about namespaces.
 // In the section `The /proc/pid/ns/ directory`, it is explained that:
@@ -132,9 +134,14 @@ static ROOT_MNT_NS_FD: LateInit<i32> = LateInit::new();
 // namespace of the process specified by pid. As long as this file descriptor
 // remains open, the namespace will remain alive, even if all processes in the
 // namespace terminate.
-pub fn save_mount_namespace(pid: i32, clean: bool) -> Result<i32> {
+pub fn save_mount_namespace(pid: i32, namespace_type: MountNamespace) -> Result<i32> {
     // We shall use CLEAN_MNT_NS_FD and ROOT_MNT_NS_FD to keep the namespace file handle.
-    if (clean && !CLEAN_MNT_NS_FD.initiated()) || (!clean && !ROOT_MNT_NS_FD.initiated()) {
+    let is_initialized = match namespace_type {
+        MountNamespace::Clean => CLEAN_MNT_NS_FD.initiated(),
+        MountNamespace::Root => ROOT_MNT_NS_FD.initiated(),
+        MountNamespace::Module => MODULE_MNT_NS_FD.initiated(),
+    };
+    if !is_initialized {
         // Use a pipe to keep the forked child process open
         // till the namespace is read.
 
@@ -147,11 +154,11 @@ pub fn save_mount_namespace(pid: i32, clean: bool) -> Result<i32> {
             0 => {
                 // Child process
                 switch_mount_namespace(pid)?;
-                if clean {
+                if namespace_type != MountNamespace::Root {
                     unsafe {
                         libc::unshare(libc::CLONE_NEWNS);
                     }
-                    revert_unmount()?;
+                    revert_unmount(namespace_type == MountNamespace::Module)?;
                 }
                 let mut mypid = 0;
                 while mypid != unsafe { libc::getpid() } {
@@ -178,30 +185,34 @@ pub fn save_mount_namespace(pid: i32, clean: bool) -> Result<i32> {
                         bail!(Error::last_os_error());
                     }
                 };
-                if clean {
-                    CLEAN_MNT_NS_FD.init(ns_file.as_raw_fd());
-                    trace!("CLEAN_MNT_NS_FD updated to {}", *CLEAN_MNT_NS_FD);
-                } else {
-                    ROOT_MNT_NS_FD.init(ns_file.as_raw_fd());
-                    trace!("ROOT_MNT_NS_FD updated to {}", *ROOT_MNT_NS_FD);
-                }
+                match namespace_type {
+                    MountNamespace::Clean => {
+                        CLEAN_MNT_NS_FD.init(ns_file.as_raw_fd());
+                        trace!("CLEAN_MNT_NS_FD updated to {}", *CLEAN_MNT_NS_FD);
+                    }
+                    MountNamespace::Root => {
+                        ROOT_MNT_NS_FD.init(ns_file.as_raw_fd());
+                        trace!("ROOT_MNT_NS_FD updated to {}", *ROOT_MNT_NS_FD);
+                    }
+                    MountNamespace::Module => {
+                        MODULE_MNT_NS_FD.init(ns_file.as_raw_fd());
+                        trace!("MODULE_MNT_NS_FD updated to {}", *MODULE_MNT_NS_FD);
+                    }
+                };
                 std::mem::forget(ns_file);
             }
             _ => bail!(Error::last_os_error()),
         }
     }
-
-    if clean && CLEAN_MNT_NS_FD.initiated() {
-        Ok(*CLEAN_MNT_NS_FD)
-    } else if !clean && ROOT_MNT_NS_FD.initiated() {
-        Ok(*ROOT_MNT_NS_FD)
-    } else {
-        error!("failed to save_mount_namespace({pid}, {clean})");
-        Ok(0)
+    match namespace_type {
+        MountNamespace::Clean if CLEAN_MNT_NS_FD.initiated() => Ok(*CLEAN_MNT_NS_FD),
+        MountNamespace::Root if ROOT_MNT_NS_FD.initiated() => Ok(*ROOT_MNT_NS_FD),
+        MountNamespace::Module if MODULE_MNT_NS_FD.initiated() => Ok(*MODULE_MNT_NS_FD),
+        _ => Ok(0),
     }
 }
 
-fn revert_unmount() -> Result<()> {
+fn revert_unmount(modules_only: bool) -> Result<()> {
     let mount_infos = Process::myself().unwrap().mountinfo().unwrap();
     let mut targets: Vec<String> = Vec::new();
     let root_implementation = root_impl::get_impl();
@@ -209,13 +220,23 @@ fn revert_unmount() -> Result<()> {
         let path = info.mount_point.to_str().unwrap().to_string();
         let should_unmount: bool = match root_implementation {
             root_impl::RootImpl::Magisk => {
-                info.mount_source == Some("magisk".to_string())
-                    || info.root.starts_with("/adb/modules")
+                if modules_only {
+                    path.starts_with("/debug_ramdisk")
+                        || (info.mount_source == Some("magisk".to_string())
+                            && path.starts_with("/system/bin"))
+                } else {
+                    info.mount_source == Some("magisk".to_string())
+                        || info.root.starts_with("/adb/modules")
+                }
             }
             root_impl::RootImpl::KernelSU => {
-                info.mount_source == Some("KSU".to_string())
-                    || info.root.starts_with("/adb/modules")
-                    || path.starts_with("/data/adb/modules")
+                if modules_only {
+                    path.starts_with("/debug_ramdisk")
+                } else {
+                    info.mount_source == Some("KSU".to_string())
+                        || info.root.starts_with("/adb/modules")
+                        || path.starts_with("/data/adb/modules")
+                }
             }
             _ => panic!("wrong root impl: {:?}", root_impl::get_impl()),
         };

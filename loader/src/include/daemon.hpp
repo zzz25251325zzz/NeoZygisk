@@ -56,7 +56,7 @@ struct Module {
 };
 
 enum class SocketAction {
-    PingHeartBeat,
+    PingHeartbeat,
     GetProcessFlags,
     UpdateMountNamespace,
     ReadModules,
@@ -65,6 +65,8 @@ enum class SocketAction {
     ZygoteRestart,
     SystemServerStarted,
 };
+
+enum class MountNamespace { Clean, Root, Module };
 
 void Init(const char* path);
 
@@ -76,7 +78,7 @@ std::vector<Module> ReadModules();
 
 uint32_t GetProcessFlags(uid_t uid);
 
-std::string UpdateMountNamespace(pid_t pid, bool clean);
+std::string UpdateMountNamespace(pid_t pid, MountNamespace type);
 
 int ConnectCompanion(size_t index);
 

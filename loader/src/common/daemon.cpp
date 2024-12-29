@@ -41,7 +41,7 @@ bool PingHeartbeat() {
         PLOGE("Connect to zygiskd");
         return false;
     }
-    socket_utils::write_u8(fd, (uint8_t) SocketAction::PingHeartBeat);
+    socket_utils::write_u8(fd, (uint8_t) SocketAction::PingHeartbeat);
     return true;
 }
 
@@ -56,7 +56,7 @@ uint32_t GetProcessFlags(uid_t uid) {
     return socket_utils::read_u32(fd);
 }
 
-std::string UpdateMountNamespace(pid_t pid, bool clean) {
+std::string UpdateMountNamespace(pid_t pid, MountNamespace type) {
     UniqueFd fd = Connect(1);
     if (fd == -1) {
         PLOGE("UpdateMountNamespace");
@@ -64,7 +64,7 @@ std::string UpdateMountNamespace(pid_t pid, bool clean) {
     }
     socket_utils::write_u8(fd, (uint8_t) SocketAction::UpdateMountNamespace);
     socket_utils::write_u32(fd, (uint32_t) pid);
-    socket_utils::write_u8(fd, (uint8_t) clean);
+    socket_utils::write_u8(fd, (uint8_t) type);
     uint32_t target_pid = socket_utils::read_u32(fd);
     int target_fd = (int) socket_utils::read_u32(fd);
     if (target_fd == 0) return "";

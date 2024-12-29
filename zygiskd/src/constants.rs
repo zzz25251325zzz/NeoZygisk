@@ -34,6 +34,14 @@ pub enum DaemonSocketAction {
     SystemServerStarted,
 }
 
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum MountNamespace {
+    Clean,
+    Root,
+    Module,
+}
+
 // Zygisk process flags
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

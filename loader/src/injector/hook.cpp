@@ -105,8 +105,10 @@ DCL_HOOK_FUNC(static int, unshare, int flags) {
     if (g_ctx && (flags & CLONE_NEWNS) != 0 && res == 0 &&
         // Skip system server and the first app process since we don't need to hide traces for them
         !(g_ctx->flags & SERVER_FORK_AND_SPECIALIZE) && !(g_ctx->info_flags & IS_FIRST_PROCESS)) {
-        if (!(g_ctx->flags & DO_REVERT_UNMOUNT)) {
-            update_mnt_ns(getpid(), false, false);
+        if (g_ctx->info_flags & (PROCESS_IS_MANAGER | PROCESS_GRANTED_ROOT)) {
+            ZygiskContext::update_mount_namespace(getpid(), zygiskd::MountNamespace::Root);
+        } else if (!(g_ctx->flags & DO_REVERT_UNMOUNT)) {
+            ZygiskContext::update_mount_namespace(getpid(), zygiskd::MountNamespace::Module);
         }
         old_unshare(CLONE_NEWNS);
     }
@@ -372,8 +374,6 @@ void HookContext::restore_zygote_hook(JNIEnv *env) {
 void hook_entry(void *start_addr, size_t block_size) {
     g_hook = new HookContext(start_addr, block_size);
     g_hook->hook_plt();
-    g_hook->cached_mount_infos = parse_mount_info("self");
-    mount_modules(g_hook->cached_mount_infos, true);
     clean_trace(zygiskd::GetTmpPath().data(), 1, 0, false);
 }
 

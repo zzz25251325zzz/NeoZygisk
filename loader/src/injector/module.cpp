@@ -2,6 +2,7 @@
 
 #include <android/dlext.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -327,7 +328,7 @@ void ZygiskContext::app_specialize_pre() {
 
     info_flags = zygiskd::GetProcessFlags(g_ctx->args.app->uid);
     if (info_flags & IS_FIRST_PROCESS) {
-        update_mnt_ns(getpid(), true, true);
+        update_mount_namespace(getpid(), zygiskd::MountNamespace::Clean, true);
     }
     if ((info_flags & UNMOUNT_MASK) == UNMOUNT_MASK) {
         LOGI("[%s] is on the denylist\n", process);
@@ -396,7 +397,7 @@ void ZygiskContext::nativeForkAndSpecialize_pre() {
     flags |= APP_FORK_AND_SPECIALIZE;
 
     // unmount the root implementation for Zygote
-    update_mnt_ns(getpid(), true, false);
+    update_mount_namespace(getpid(), zygiskd::MountNamespace::Clean, false);
 
     fork_pre();
     if (is_child()) {
@@ -411,4 +412,32 @@ void ZygiskContext::nativeForkAndSpecialize_post() {
         app_specialize_post();
     }
     fork_post();
+}
+
+// -----------------------------------------------------------------
+
+bool ZygiskContext::update_mount_namespace(pid_t pid, zygiskd::MountNamespace namespace_type,
+                                           bool dry_run) {
+    if (pid < 0) {
+        LOGD("update mount namespace with an invalid pid %d", pid);
+        return false;
+    }
+
+    std::string ns_path = zygiskd::UpdateMountNamespace(pid, namespace_type);
+    if (!ns_path.starts_with("/proc/")) {
+        PLOGE("update mount namespace [%s]", ns_path.data());
+        return false;
+    }
+    if (dry_run) return true;
+
+    auto updated_ns = open(ns_path.data(), O_RDONLY);
+    if (updated_ns >= 0) {
+        LOGD("set mount namespace to [%s] fd=[%d]\n", ns_path.data(), updated_ns);
+        setns(updated_ns, CLONE_NEWNS);
+    } else {
+        PLOGE("open mount namespace [%s]", ns_path.data());
+        return false;
+    }
+    close(updated_ns);
+    return true;
 }

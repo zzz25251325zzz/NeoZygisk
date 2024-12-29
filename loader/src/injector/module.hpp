@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "api.hpp"
-#include "files.hpp"
+#include "daemon.hpp"
 #include "lsplt.hpp"
 
 struct ZygiskContext;
@@ -307,6 +307,9 @@ struct ZygiskContext {
     void plt_hook_process_regex();
 
     bool plt_hook_commit();
+
+    static bool update_mount_namespace(pid_t pid, zygiskd::MountNamespace namespace_type,
+                                       bool dry_run = false);
 };
 
 #undef DCL_PRE_POST
@@ -323,7 +326,6 @@ struct HookContext {
     jint MODIFIER_NATIVE = 0;
     jmethodID member_getModifiers = nullptr;
     std::vector<lsplt::MapInfo> cached_map_infos = {};
-    std::vector<mount_info> cached_mount_infos = {};
     std::vector<std::tuple<dev_t, ino_t, const char *, void **>> plt_backup;
 
     HookContext(void *start_addr, size_t block_size);
