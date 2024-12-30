@@ -108,20 +108,6 @@ pub fn main() -> Result<()> {
                 let value = constants::SYSTEM_SERVER_STARTED;
                 utils::unix_datagram_sendto(&CONTROLLER_SOCKET, &value.to_le_bytes())?;
             }
-            DaemonSocketAction::UpdateMountNamespace => {
-                let pid = stream.read_u32()?;
-                let namespace_type = stream.read_u8()?;
-                let namespace_type = MountNamespace::try_from(namespace_type)?;
-                stream.write_u32(unsafe { libc::getpid() } as u32)?;
-                if namespace_type == MountNamespace::Clean {
-                    // we will only clean once, which is exactly the moment
-                    // to cache mount namespaces
-                    save_mount_namespace(pid as i32, MountNamespace::Root)?;
-                    save_mount_namespace(pid as i32, MountNamespace::Module)?;
-                }
-                let fd = save_mount_namespace(pid as i32, namespace_type)?;
-                stream.write_u32(fd as u32)?;
-            }
             _ => {
                 thread::spawn(move || {
                     if let Err(e) = handle_daemon_action(action, stream, &context) {
@@ -292,6 +278,20 @@ fn handle_daemon_action(
                 flags.contains(ProcessFlags::PROCESS_ON_DENYLIST)
             );
             stream.write_u32(flags.bits())?;
+        }
+        DaemonSocketAction::UpdateMountNamespace => {
+            let pid = stream.read_u32()?;
+            let namespace_type = stream.read_u8()?;
+            let namespace_type = MountNamespace::try_from(namespace_type)?;
+            stream.write_u32(unsafe { libc::getpid() } as u32)?;
+            if namespace_type == MountNamespace::Clean {
+                // we will only clean once, which is exactly the moment
+                // to cache mount namespaces
+                save_mount_namespace(pid as i32, MountNamespace::Root)?;
+                save_mount_namespace(pid as i32, MountNamespace::Module)?;
+            }
+            let fd = save_mount_namespace(pid as i32, namespace_type)?;
+            stream.write_u32(fd as u32)?;
         }
         DaemonSocketAction::ReadModules => {
             stream.write_usize(context.modules.len())?;
