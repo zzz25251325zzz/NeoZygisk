@@ -24,6 +24,7 @@ val moduleId: String by rootProject.extra
 val moduleName: String by rootProject.extra
 val verCode: Int by rootProject.extra
 val verName: String by rootProject.extra
+val minAPatchVersion: Int by rootProject.extra
 val minKsuVersion: Int by rootProject.extra
 val minKsudVersion: Int by rootProject.extra
 val maxKsuVersion: Int by rootProject.extra
@@ -69,6 +70,7 @@ androidComponents.onVariants { variant ->
             include("action.sh", "customize.sh", "post-fs-data.sh", "service.sh", "uninstall.sh", "zygisk-ctl.sh")
             val tokens = mapOf(
                 "DEBUG" to if (buildTypeLowered == "debug") "true" else "false",
+                "MIN_APATCH_VERSION" to "$minAPatchVersion",
                 "MIN_KSU_VERSION" to "$minKsuVersion",
                 "MIN_KSUD_VERSION" to "$minKsudVersion",
                 "MAX_KSU_VERSION" to "$maxKsuVersion",
@@ -112,6 +114,22 @@ androidComponents.onVariants { variant ->
         commandLine("adb", "push", zipTask.outputs.files.singleFile.path, "/data/local/tmp")
     }
 
+    val installAPatchTask = task("installAPatch$variantCapped") {
+        group = "module"
+        dependsOn(pushTask)
+        doLast {
+            exec {
+                commandLine(
+                    "adb", "shell", "echo",
+                    "/data/adb/apd module install /data/local/tmp/$zipFileName",
+                    "> /data/local/tmp/install.sh"
+                )
+            }
+            exec { commandLine("adb", "shell", "chmod", "755", "/data/local/tmp/install.sh") }
+            exec { commandLine("adb", "shell", "su", "-c", "/data/local/tmp/install.sh") }
+        }
+    }
+
     val installKsuTask = task("installKsu$variantCapped") {
         group = "module"
         dependsOn(pushTask)
@@ -132,6 +150,12 @@ androidComponents.onVariants { variant ->
         group = "module"
         dependsOn(pushTask)
         commandLine("adb", "shell", "su", "-M", "-c", "magisk --install-module /data/local/tmp/$zipFileName")
+    }
+
+    task<Exec>("installAPatchAndReboot$variantCapped") {
+        group = "module"
+        dependsOn(installAPatchTask)
+        commandLine("adb", "reboot")
     }
 
     task<Exec>("installKsuAndReboot$variantCapped") {

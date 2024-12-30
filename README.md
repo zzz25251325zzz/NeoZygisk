@@ -1,12 +1,16 @@
 # NeoZygisk
 
-NeoZygisk is a Zygote injection module implemented using `ptrace`, which provides Zygisk API support for KernelSU and serves as a replacement of Magisk's built-in Zygisk.
+NeoZygisk is a Zygote injection module implemented using `ptrace`, which provides Zygisk API support for APatch/KernelSU and serves as a replacement of Magisk's built-in Zygisk.
 
 ## Requirements
 
 ### General
 
 + No multiple root implementation installed
+
+### APatch
+
++ Minimal APatch version: 10762
 
 ### KernelSU
 
