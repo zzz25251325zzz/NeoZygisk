@@ -362,7 +362,7 @@ pub fn unix_listener_from_path(path: &str) -> Result<UnixListener> {
     let socket = socket(AddressFamily::UNIX, SocketType::STREAM, None)?;
     bind_unix(&socket, &addr)?;
     listen(&socket, 2)?;
-    chcon(path, "u:object_r:magisk_file:s0")?;
+    chcon(path, "u:object_r:zygisk_file:s0")?;
     Ok(UnixListener::from(socket))
 }
 
