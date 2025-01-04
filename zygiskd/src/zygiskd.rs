@@ -22,7 +22,7 @@ use std::thread;
 struct Module {
     name: String,
     lib_fd: OwnedFd,
-    companion: Mutex<Option<Option<UnixStream>>>,
+    companion: Mutex<Option<UnixStream>>,
 }
 
 struct Context {
@@ -149,11 +149,11 @@ fn load_modules(arch: &str) -> Result<Vec<Module>> {
         if !so_path.exists() || disabled.exists() {
             continue;
         }
-        info!("  Loading module `{name}`...");
+        info!("Loading module `{name}`...");
         let lib_fd = match create_library_fd(&so_path) {
             Ok(fd) => fd,
             Err(e) => {
-                warn!("  Failed to create memfd for `{name}`: {e}");
+                warn!("Failed to create memfd for `{name}`: {e}");
                 continue;
             }
         };
@@ -304,7 +304,7 @@ fn handle_daemon_action(
             let index = stream.read_usize()?;
             let module = &context.modules[index];
             let mut companion = module.companion.lock().unwrap();
-            if let Some(Some(sock)) = companion.as_ref() {
+            if let Some(sock) = companion.as_ref() {
                 if !check_unix_socket(sock, false) {
                     error!("Poll companion for module `{}` crashed", module.name);
                     companion.take();
@@ -316,12 +316,9 @@ fn handle_daemon_action(
                         if c.is_some() {
                             trace!("Spawned companion for `{}`", module.name);
                         } else {
-                            trace!(
-                                "No companion spawned for `{}` because it has not entry",
-                                module.name
-                            );
+                            warn!("Companion not spawned for `{}`", module.name);
                         }
-                        *companion = Some(c);
+                        *companion = c;
                     }
                     Err(e) => {
                         warn!("Failed to spawn companion for `{}`: {}", module.name, e);
@@ -329,7 +326,7 @@ fn handle_daemon_action(
                 };
             }
             match companion.as_ref() {
-                Some(Some(sock)) => {
+                Some(sock) => {
                     if let Err(e) = sock.send_fd(stream.as_raw_fd()) {
                         error!(
                             "Failed to send companion fd socket of module `{}`: {}",
