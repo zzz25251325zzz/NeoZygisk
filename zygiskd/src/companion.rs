@@ -1,5 +1,5 @@
 use crate::dl;
-use crate::utils::{check_unix_socket, UnixStreamExt};
+use crate::utils::{UnixStreamExt, check_unix_socket};
 use anyhow::Result;
 use passfd::FdPassingExt;
 use rustix::fs::fstat;
@@ -53,6 +53,8 @@ pub fn entry(fd: i32) {
                 if st0.st_dev != st1.st_dev || st0.st_ino != st1.st_ino {
                     std::mem::forget(stream);
                 }
+            } else {
+                std::mem::forget(stream);
             }
         });
     }
