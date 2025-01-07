@@ -1,6 +1,7 @@
 #pragma once
 
 #include <android/log.h>
+#include <errno.h>
 
 #ifndef LOG_TAG
 #if defined(__LP64__)
