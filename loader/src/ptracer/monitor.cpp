@@ -381,7 +381,7 @@ public:
                     continue;
                 }
 #define CHECK_DAEMON_EXIT(abi)                                                                     \
-    if (status##abi.supported && pid == status64.daemon_pid) {                                     \
+    if (status##abi.supported && pid == status##abi.daemon_pid) {                                  \
         auto status_str = parse_status(status);                                                    \
         LOGW("daemon" #abi "pid %d exited: %s", pid, status_str.c_str());                          \
         status##abi.daemon_running = false;                                                        \
