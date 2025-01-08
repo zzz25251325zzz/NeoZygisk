@@ -215,39 +215,20 @@ pub fn save_mount_namespace(pid: i32, namespace_type: MountNamespace) -> Result<
 fn revert_unmount(modules_only: bool) -> Result<()> {
     let mount_infos = Process::myself().unwrap().mountinfo().unwrap();
     let mut targets: Vec<String> = Vec::new();
-    let root_implementation = root_impl::get_impl();
+    let mount_source = match root_impl::get_impl() {
+        root_impl::RootImpl::APatch => "APatch",
+        root_impl::RootImpl::KernelSU => "KSU",
+        root_impl::RootImpl::Magisk => "magisk",
+        _ => panic!("wrong root impl: {:?}", root_impl::get_impl()),
+    };
     for info in mount_infos {
         let path = info.mount_point.to_str().unwrap().to_string();
-        let should_unmount: bool = match root_implementation {
-            root_impl::RootImpl::APatch => {
-                if modules_only {
-                    path.starts_with("/debug_ramdisk")
-                } else {
-                    info.mount_source == Some("APatch".to_string())
-                        || info.root.starts_with("/adb/modules")
-                        || path.starts_with("/data/adb/modules")
-                }
-            }
-            root_impl::RootImpl::KernelSU => {
-                if modules_only {
-                    path.starts_with("/debug_ramdisk")
-                } else {
-                    info.mount_source == Some("KSU".to_string())
-                        || info.root.starts_with("/adb/modules")
-                        || path.starts_with("/data/adb/modules")
-                }
-            }
-            root_impl::RootImpl::Magisk => {
-                if modules_only {
-                    path.starts_with("/debug_ramdisk")
-                        || (info.mount_source == Some("magisk".to_string())
-                            && path.starts_with("/system/bin"))
-                } else {
-                    info.mount_source == Some("magisk".to_string())
-                        || info.root.starts_with("/adb/modules")
-                }
-            }
-            _ => panic!("wrong root impl: {:?}", root_impl::get_impl()),
+        let should_unmount: bool = if modules_only {
+            path.starts_with("/debug_ramdisk") && mount_source != "magisk"
+        } else {
+            info.root.starts_with("/adb/modules")
+                || path.starts_with("/data/adb/modules")
+                || info.mount_source == Some(mount_source.to_string())
         };
         if should_unmount {
             targets.push(path);
