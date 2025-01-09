@@ -1,9 +1,8 @@
-
 printf "Status of NeoZygisk\n\n"
 
 cat @WORK_DIRECTORY@/module.prop
 
-if [ -z $MMRL ] && { [ $KSU = true ] || [ $APATCH = true ]; }; then
-	# Avoid instant exit on KSU or APATCH
+if [[ -z "$MMRL" ]] && ([[ -n "$KSU" ]] || [[ -n "$APATCH" ]]); then
+	# Avoid instant exit on KernelSU or APatch
 	sleep 10
 fi
