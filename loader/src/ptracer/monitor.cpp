@@ -115,6 +115,13 @@ static Status status64;
 static Status status32;
 
 struct SocketHandler : public EventHandler {
+    struct [[gnu::packed]] MsgHead {
+        Command cmd;
+        int length;
+        char data[0];
+    };
+    std::vector<uint8_t> buf;
+
     int sock_fd_;
 
     bool Init() {
@@ -138,13 +145,7 @@ struct SocketHandler : public EventHandler {
     int GetFd() override { return sock_fd_; }
 
     void HandleEvent(EventLoop &loop, uint32_t) override {
-        struct [[gnu::packed]] MsgHead {
-            Command cmd;
-            int length;
-            char data[0];
-        };
         for (;;) {
-            std::vector<uint8_t> buf;
             buf.resize(sizeof(MsgHead), 0);
             MsgHead &msg = *reinterpret_cast<MsgHead *>(buf.data());
             ssize_t real_size;
