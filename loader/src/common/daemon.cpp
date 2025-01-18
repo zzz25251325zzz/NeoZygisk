@@ -15,8 +15,9 @@ std::string GetTmpPath() { return TMP_PATH; }
 
 int Connect(uint8_t retry) {
     int fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    struct sockaddr_un addr {
-        .sun_family = AF_UNIX, .sun_path = {0},
+    struct sockaddr_un addr{
+        .sun_family = AF_UNIX,
+        .sun_path = {0},
     };
     auto socket_path = TMP_PATH + kCPSocketName;
     strcpy(addr.sun_path, socket_path.c_str());
@@ -56,14 +57,22 @@ uint32_t GetProcessFlags(uid_t uid) {
     return socket_utils::read_u32(fd);
 }
 
-std::string UpdateMountNamespace(pid_t pid, MountNamespace type) {
+void CacheMountNamespace(pid_t pid) {
+    UniqueFd fd = Connect(1);
+    if (fd == -1) {
+        PLOGE("CacheMountNamespace");
+    }
+    socket_utils::write_u8(fd, (uint8_t) SocketAction::CacheMountNamespace);
+    socket_utils::write_u32(fd, (uint32_t) pid);
+}
+
+std::string UpdateMountNamespace(MountNamespace type) {
     UniqueFd fd = Connect(1);
     if (fd == -1) {
         PLOGE("UpdateMountNamespace");
         return "";
     }
     socket_utils::write_u8(fd, (uint8_t) SocketAction::UpdateMountNamespace);
-    socket_utils::write_u32(fd, (uint32_t) pid);
     socket_utils::write_u8(fd, (uint8_t) type);
     uint32_t target_pid = socket_utils::read_u32(fd);
     int target_fd = (int) socket_utils::read_u32(fd);
