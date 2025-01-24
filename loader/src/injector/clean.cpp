@@ -63,10 +63,6 @@ bool initialize() {
         llvm_sufix[0] = '\0';
     }
 
-    solist = getStaticPointer<SoInfo>(linker, solist_sym_name.data());
-    if (solist == nullptr) return false;
-    LOGD("found symbol solist");
-
     char somain_sym_name[sizeof("__dl__ZL6somain") + sizeof(llvm_sufix)];
     snprintf(somain_sym_name, sizeof(somain_sym_name), "__dl__ZL6somain%s", llvm_sufix);
 
@@ -89,13 +85,7 @@ bool initialize() {
 
     SoInfo::get_realpath_sym = reinterpret_cast<decltype(SoInfo::get_realpath_sym)>(
         linker.getSymbAddress("__dl__ZNK6soinfo12get_realpathEv"));
-    if (SoInfo::get_realpath_sym == nullptr) return false;
-    LOGD("found symbol get_realpath_sym");
-
-    SoInfo::get_soname_sym = reinterpret_cast<decltype(SoInfo::get_soname_sym)>(
-        linker.getSymbAddress("__dl__ZNK6soinfo10get_sonameEv"));
-    if (SoInfo::get_soname_sym == nullptr) return false;
-    LOGD("found symbol get_soname_sym");
+    if (SoInfo::get_realpath_sym != nullptr) LOGD("found symbol get_realpath_sym");
 
     SoInfo::soinfo_free =
         reinterpret_cast<decltype(SoInfo::soinfo_free)>(linker.getSymbAddress(soinfo_free_name));
@@ -110,21 +100,47 @@ bool initialize() {
         linker.getSymbAddress("__dl__ZL23g_module_unload_counter"));
     if (g_module_unload_counter != nullptr) LOGD("found symbol g_module_unload_counter");
 
+    solist = getStaticPointer<SoInfo>(linker, solist_sym_name.data());
+    if (solist == nullptr) return false;
+    LOGD("found symbol solist");
+
+    bool size_filed_found = false;
+    bool next_filed_found = false;
+    const size_t linker_realpath_size = linker.name().size();
     for (size_t i = 0; i < size_block_range / sizeof(void *); i++) {
         auto possible_field = reinterpret_cast<uintptr_t>(solist) + i * sizeof(void *);
         auto possible_size_of_somain =
             *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(somain) + i * sizeof(void *));
-        if (possible_size_of_somain < size_maximal && possible_size_of_somain > size_minimal) {
-            SoInfo::solist_size_offset = i * sizeof(void *);
-            LOGD("solist_size_offset is %zu * %zu = %p", i, sizeof(void *),
-                 (void *) SoInfo::solist_size_offset);
+        if (!size_filed_found && possible_size_of_somain < size_maximal &&
+            possible_size_of_somain > size_minimal) {
+            SoInfo::field_size_offset = i * sizeof(void *);
+            LOGD("field_size_offset is %zu * %zu = %p", i, sizeof(void *),
+                 (void *) SoInfo::field_size_offset);
+            size_filed_found = true;
         }
-        if (*reinterpret_cast<void **>(possible_field) == somain ||
-            (vdso != nullptr && *reinterpret_cast<void **>(possible_field) == vdso)) {
-            SoInfo::solist_next_offset = i * sizeof(void *);
-            LOGD("solist_next_offset is %zu * %zu = %p", i, sizeof(void *),
-                 (void *) SoInfo::solist_next_offset);
-            break;
+        if (!next_filed_found &&
+            (*reinterpret_cast<void **>(possible_field) == somain ||
+             (vdso != nullptr && *reinterpret_cast<void **>(possible_field) == vdso))) {
+            SoInfo::field_next_offset = i * sizeof(void *);
+            LOGD("field_next_offset should be here %zu * %zu = %p", i, sizeof(void *),
+                 (void *) SoInfo::field_next_offset);
+            next_filed_found = true;
+            if (SoInfo::get_realpath_sym != nullptr) break;
+        }
+        if (size_filed_found && next_filed_found) {
+            std::string *realpath = reinterpret_cast<std::string *>(
+                reinterpret_cast<uintptr_t>(solist) + i * sizeof(void *));
+            if (realpath->size() == linker_realpath_size) {
+                char buffer[100];
+                strncpy(buffer, realpath->c_str(), linker_realpath_size);
+                buffer[linker_realpath_size] = '\0';
+                if (strcmp(linker.name().c_str(), buffer) == 0) {
+                    SoInfo::field_realpath_offset = i * sizeof(void *);
+                    LOGD("field_realpath_offset is %zu * %zu = %p", i, sizeof(void *),
+                         (void *) SoInfo::field_realpath_offset);
+                    break;
+                }
+            }
         }
     }
 
@@ -138,10 +154,9 @@ bool dropSoPath(const char *target_path) {
         return path_found;
     }
     for (auto *iter = solist; iter; iter = iter->getNext()) {
-        if (iter->getName() && iter->getPath() && strstr(iter->getPath(), target_path)) {
+        if (iter->getPath() && strstr(iter->getPath(), target_path)) {
             SoList::ProtectedDataGuard guard;
-            LOGD("dropping solist record for %s loaded at %s with size %zu", iter->getName(),
-                 iter->getPath(), iter->getSize());
+            LOGD("dropping solist record for %s with size %zu", iter->getPath(), iter->getSize());
             if (iter->getSize() > 0) {
                 iter->setSize(0);
                 SoInfo::soinfo_free(iter);

@@ -8,49 +8,40 @@ namespace SoList {
 class SoInfo {
 public:
 #ifdef __LP64__
-    inline static size_t solist_size_offset = 0x18;
-    inline static size_t solist_next_offset = 0x28;
-    inline static size_t solist_realpath_offset = 0x1a8;
+    inline static size_t field_size_offset = 0x18;
+    inline static size_t field_next_offset = 0x28;
+    inline static size_t field_realpath_offset = 0x1a0;
 #else
-    inline static size_t solist_size_offset = 0x90;
-    inline static size_t solist_next_offset = 0xa4;
-    inline static size_t solist_realpath_offset = 0x174;
+    inline static size_t field_size_offset = 0x90;
+    inline static size_t field_next_offset = 0xa4;
+    inline static size_t field_realpath_offset = 0x17c;
 #endif
 
     inline static const char *(*get_realpath_sym)(SoInfo *) = nullptr;
-    inline static const char *(*get_soname_sym)(SoInfo *) = nullptr;
     inline static void (*soinfo_free)(SoInfo *) = nullptr;
 
     inline SoInfo *getNext() {
-        return *reinterpret_cast<SoInfo **>(reinterpret_cast<uintptr_t>(this) + solist_next_offset);
+        return *reinterpret_cast<SoInfo **>(reinterpret_cast<uintptr_t>(this) + field_next_offset);
     }
 
     inline size_t getSize() {
-        return *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(this) + solist_size_offset);
+        return *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(this) + field_size_offset);
     }
 
     inline const char *getPath() {
         if (get_realpath_sym) return get_realpath_sym(this);
 
         return (reinterpret_cast<std::string *>(reinterpret_cast<uintptr_t>(this) +
-                                                solist_realpath_offset))
-            ->c_str();
-    }
-
-    inline const char *getName() {
-        if (get_soname_sym) return get_soname_sym(this);
-
-        return (reinterpret_cast<std::string *>(reinterpret_cast<uintptr_t>(this) +
-                                                solist_realpath_offset - sizeof(void *)))
+                                                field_realpath_offset))
             ->c_str();
     }
 
     void setNext(SoInfo *info) {
-        *reinterpret_cast<SoInfo **>(reinterpret_cast<uintptr_t>(this) + solist_next_offset) = info;
+        *reinterpret_cast<SoInfo **>(reinterpret_cast<uintptr_t>(this) + field_next_offset) = info;
     }
 
     void setSize(size_t size) {
-        *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(this) + solist_size_offset) = size;
+        *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(this) + field_size_offset) = size;
     }
 };
 
